@@ -9,6 +9,13 @@ The script scans the current user's Edge `User Data` directory and deletes the f
 - `Cache`
 - `Code Cache`
 - `GPUCache`
+- `CacheStorage` (under `Service Worker`; the offline cache of PWAs such as Teams, Outlook web and M365 — in practice by far the largest consumer)
+
+Directly under `User Data` it also removes:
+
+- `Snapshots` (profile copies kept by old Edge versions for rollback)
+
+Profiles themselves, logins, bookmarks, history and extensions are not touched.
 
 When it finishes, it prints the total number of files deleted and the total size in GB.
 
@@ -16,7 +23,7 @@ When it finishes, it prints the total number of files deleted and the total size
 
 - Windows with Microsoft Edge installed
 - PowerShell 5.1 or newer
-- Microsoft Edge should be closed before running, otherwise some files will be locked and cannot be removed
+- Microsoft Edge must be closed. The script checks for running `msedge` processes and exits if it finds any, because locked files would otherwise leave the cache half-cleaned. Note that Edge may keep background processes alive after the last window is closed (startup boost / background extensions); end those first.
 
 ## Usage
 
@@ -40,6 +47,7 @@ The script uses the `%LOCALAPPDATA%` environment variable, so it works for any u
 Zoeken naar Edge-cachemappen in: C:\Users\<user>\AppData\Local\Microsoft\Edge\User Data
 Verwijderen: C:\Users\<user>\AppData\Local\Microsoft\Edge\User Data\Default\Cache
 Verwijderen: C:\Users\<user>\AppData\Local\Microsoft\Edge\User Data\Default\Code Cache
+Verwijderen: C:\Users\<user>\AppData\Local\Microsoft\Edge\User Data\Default\Service Worker\CacheStorage
 ...
 Klaar. Verwijderd: 1234 bestanden (2.47 GB).
 ```
