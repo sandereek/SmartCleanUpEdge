@@ -1,0 +1,125 @@
+<h3>Your GPT-4o Is Retiring. A Model Swap Is Not an Upgrade Until You Have Tested It</h3>
+
+<p>If you run anything on Azure OpenAI, you probably received the same email we did this week: <em>"Retirement notice: Azure OpenAI GPT-4o, GPT-4o-mini, and GPT-4.1-mini model version(s) … will be retired"</em>. Date: <strong>14 April 2027</strong>. Tracking ID in Service Health: <strong>MR5M-CG0</strong>.</p>
+
+<p>It is tempting to file it under "later". Five months feels like plenty, the email talks about automatic upgrades, and the replacement models are newer, so surely they are better. That reasoning is about half right, and the wrong half is the expensive one.</p>
+
+<p>This post is meant as coaching rather than an alarm bell. What does the swap actually change for quality, for token consumption and for your bill? And what does it tell you about how to run AI workloads from now on?</p>
+
+<h4>What the notice actually says</h4>
+
+<p>On 14 April 2027 the following versions stop working in Azure public cloud:</p>
+
+<ul>
+<li>GPT-4o, versions 2024-08-06 and 2024-11-20</li>
+<li>GPT-4o-mini, version 2024-07-18</li>
+<li>GPT-4.1-mini, version 2025-04-14</li>
+</ul>
+
+<p>The notice names a replacement per deployment type. For <strong>Global and Data Zone</strong> deployments, all four are replaced by <strong>gpt-6-luna (2026-09-22)</strong>. For <strong>regional</strong> deployments, GPT-4o maps to <strong>gpt-5.1 (2025-11-13)</strong> and the two mini models map to <strong>gpt-5-mini (2025-08-07)</strong>.</p>
+
+<p>Read that table twice. A small, cheap, non-reasoning model such as GPT-4o-mini is being replaced by a member of the GPT-6 reasoning family. That is not a patch release. It is a different kind of engine under the same bonnet.</p>
+
+<p>Two other sentences in the notice deserve more attention than they get. First: <em>"Provisioned deployment types must be manually migrated by the customer."</em> Second: <em>"Replacement-model pricing may differ based on the model and deployment type."</em> Microsoft is being polite. Translated: if you run PTUs, nothing happens for you automatically, and if you run pay-as-you-go, something happens whether you are ready or not.</p>
+
+<p>The <a href="https://learn.microsoft.com/azure/foundry/openai/concepts/model-retirement-schedule" target="_blank" rel="noopener">model retirement schedule</a> on Microsoft Learn confirms the date. At the time of writing it still lists gpt-5.1 as the replacement for GPT-4o and no replacement for the minis, so expect the page to catch up with the notice. The notice itself warns that retirements can take up to two weeks to appear everywhere.</p>
+
+<h4>What happens if you do nothing</h4>
+
+<p>Every Standard, Global Standard and Data Zone Standard deployment has a version upgrade policy, the <code>versionUpgradeOption</code>. Microsoft documents three values in <a href="https://learn.microsoft.com/azure/foundry/openai/how-to/working-with-models" target="_blank" rel="noopener">Working with models</a>:</p>
+
+<p><strong>OnceNewDefaultVersionAvailable</strong> moves the deployment to a new default version within two weeks of that default changing. <strong>OnceCurrentVersionExpired</strong> moves it to the current default when the retirement date arrives. <strong>NoAutoUpgrade</strong> does nothing, and the deployment simply stops working on retirement day.</p>
+
+<p>Here is the detail that catches people out: if you never touched this setting, the value is <code>null</code>, and <code>null</code> behaves like <strong>OnceCurrentVersionExpired</strong>. So the most common situation in the field is this: on 14 April 2027 your application keeps answering, but a different model is doing the answering. No deploy, no change ticket, no test run.</p>
+
+<p>Microsoft says it plainly in its own <a href="https://learn.microsoft.com/azure/foundry/foundry-models/concepts/model-migration" target="_blank" rel="noopener">model migration guidance</a>: <em>"An endpoint that still responds doesn't mean your app still behaves correctly."</em> Auto-upgrade is a safety net. It is not a migration plan.</p>
+
+<p>Provisioned deployments have no safety net at all. They are not auto-upgraded, and retirement dates are not extendable. If you run PTUs, make sure you also have quota for the target model before you need it.</p>
+
+<h4>Quality: different, not automatically better</h4>
+
+<p>A newer model will usually score higher on a public benchmark. Your application is not a public benchmark. It is a specific prompt, a specific tone of voice, a specific JSON shape that some downstream code parses, and a specific set of tools the model is expected to call in a specific order.</p>
+
+<p>When you move from GPT-4o or a mini model to a reasoning model, these are the things that typically shift:</p>
+
+<ul>
+<li>Verbosity. Answers get longer, or sometimes noticeably shorter.</li>
+<li>Formatting and structured output. A schema the old model followed loosely may now be followed strictly, or differently.</li>
+<li>Tool calling. Argument names, ordering and the number of calls can change.</li>
+<li>Refusal behaviour and tone.</li>
+<li>Latency, and especially the variance in latency.</li>
+</ul>
+
+<p>Parameters are a quiet source of breakage too. The <a href="https://learn.microsoft.com/azure/foundry/openai/how-to/reasoning" target="_blank" rel="noopener">reasoning models documentation</a> explains that reasoning models use <code>max_completion_tokens</code> in Chat Completions and <code>max_output_tokens</code> in the Responses API, and that defaults for <code>reasoning_effort</code> differ by model. gpt-5.1, for example, defaults to no reasoning at all unless you ask for it. Code that was written for GPT-4o can run without errors on the new model and still behave quite differently.</p>
+
+<p>My advice: do not judge the new model by asking it five questions in the playground and thinking "that looks fine". Judge it on your own traffic.</p>
+
+<h4>Tokens: the line item that will surprise you</h4>
+
+<p>This is where the move to a reasoning model matters most, and where the email says the least.</p>
+
+<p>Reasoning models think before they answer. That thinking is made of <strong>reasoning tokens</strong>: you never see them in the response, but Microsoft is explicit that they are <strong>billed as output tokens</strong>. A short, crisp answer can therefore still cost a lot, because the model may have spent thousands of tokens getting there. And output tokens are usually the expensive ones.</p>
+
+<p>Three practical consequences.</p>
+
+<p><strong>Your token cap now covers thinking as well as answering.</strong> <code>max_completion_tokens</code> and <code>max_output_tokens</code> limit reasoning plus visible output together. Set the cap too low and the response comes back with <code>status: "incomplete"</code>, possibly before a single visible word. You pay for the input and the reasoning and you get nothing back. Microsoft suggests reserving at least 25,000 tokens while you learn how a workload behaves. Check <code>status</code> on every response, not just whether the content is empty.</p>
+
+<p><strong>reasoning_effort is now a cost dial.</strong> Values run from <code>none</code> through <code>low</code>, <code>medium</code> and <code>high</code> to <code>xhigh</code> and <code>max</code>, depending on the model. A classification or routing task that ran happily on GPT-4o-mini rarely needs <code>high</code>. Start low, measure, and only turn it up when your evaluation shows a gain worth paying for.</p>
+
+<p><strong>The bigger context window is a temptation, not a recommendation.</strong> The GPT-6 family offers a context window of over a million tokens. That is useful for genuinely long documents. It is also an invitation to stop curating what you send, and every resent conversation turn is paid input. Look at <a href="https://learn.microsoft.com/azure/foundry/openai/how-to/prompt-caching" target="_blank" rel="noopener">prompt caching</a> before you look at bigger prompts.</p>
+
+<p><strong>Caching itself changes too.</strong> On GPT-4o, writing to the prompt cache was free and reads were discounted. From the GPT-5.6 family onwards, which includes gpt-6-luna, cache <em>writes</em> can be charged on top of discounted reads. The advice is the same, but the stakes are higher: keep the reusable part of your prompt identical and at the front, so you pay for reads rather than repeated writes.</p>
+
+<p>Microsoft's own migration guide puts a number on it: reasoning tokens, cached input and structured-output overhead can swing unit economics by <strong>2x or more</strong>. So do not compare list prices per million tokens. Replay a week of real traffic, count the tokens, and project the monthly bill from that. List prices for each model are on the <a href="https://azure.microsoft.com/pricing/details/cognitive-services/openai-service/" target="_blank" rel="noopener">Azure OpenAI pricing page</a>.</p>
+
+<p>The honest summary: the new model may well do more for every token it spends. It is also likely to spend tokens in places you did not budget for. Both can be true at the same time.</p>
+
+<h4>Five questions to put to your team this month</h4>
+
+<p>Coaching is mostly asking the right questions, so here are the ones I would put on the table.</p>
+
+<ol>
+<li>Which deployments do we have, on which model version, which deployment type, and which upgrade policy?</li>
+<li>Who owns each of them? Not the subscription, the actual workload.</li>
+<li>Do we have a frozen test set of real inputs with expected outputs, so we can compare old and new on equal terms?</li>
+<li>What does a month of our actual traffic cost on the new model, including reasoning tokens?</li>
+<li>Where do we keep the old deployment running, and for how long, so that rollback is a decision rather than a scramble?</li>
+</ol>
+
+<p>If the honest answer to question three is "no", that is your real task. Everything else is easy once that exists.</p>
+
+<h4>A sensible plan for the next five months</h4>
+
+<p>Microsoft's <a href="https://learn.microsoft.com/azure/foundry/foundry-models/concepts/model-migration" target="_blank" rel="noopener">migration process</a> has six phases: discover, assess, adapt, validate, roll out and retire. Translated to a calendar it looks something like this.</p>
+
+<p><strong>November and December: inventory and capture.</strong> List every deployment, its version and its <code>versionUpgradeOption</code>. Start logging prompts, responses, latency and token counts now. Content capture is opt-in and never retroactive, so traffic you did not record cannot be evaluated later.</p>
+
+<p><strong>January: build the test set and replay unchanged.</strong> Freeze a representative dataset. Run your current configuration on the new model without changing anything, so you can see what the model changed before you start changing things yourself.</p>
+
+<p><strong>February: adapt and validate.</strong> Tune prompts, parameters, tool definitions and output schemas. Score source and target on the same frozen set with the <a href="https://learn.microsoft.com/azure/foundry/observability/how-to/cloud-evaluation" target="_blank" rel="noopener">Foundry evaluation SDK</a>: quality, latency and cost per request.</p>
+
+<p><strong>March: roll out deliberately.</strong> Move traffic in stages, keep the old deployment warm, and set the upgrade policy explicitly so nothing happens by accident. Then <strong>April</strong> is a formality instead of a deadline.</p>
+
+<h4>The bigger picture: models now come with a best-before date</h4>
+
+<p>Step back from this particular email. Microsoft states it plainly: every generally available model on Foundry ships with a retirement date, and older families are replaced over time. In the last eighteen months the recommended replacement for GPT-4o has moved from gpt-4.1 to gpt-5.1 to, now, gpt-6-luna. That is not instability. That is the rhythm of the market, and it is not going to slow down.</p>
+
+<p>Which means the organisations that will do well with AI are not the ones that pick the best model. They are the ones that can <strong>change model cheaply</strong>. In practice that comes down to a few habits.</p>
+
+<p><strong>Treat model migration as servicing, not as a project.</strong> We stopped treating Windows feature updates as heroic one-off projects years ago. Model versions deserve the same routine: an owner, a calendar and a repeatable test.</p>
+
+<p><strong>Make the evaluation set a product asset.</strong> Your prompts are cheap to rewrite. Your curated set of real inputs and agreed answers is what makes every future migration fast. Feed fresh production traces back into it after every cycle.</p>
+
+<p><strong>Decouple your code from the model name.</strong> Call a deployment name, not a model version, and keep model choice in configuration. Consider whether <a href="https://learn.microsoft.com/azure/foundry/openai/how-to/model-router" target="_blank" rel="noopener">model router</a> fits workloads where you care more about cost per answer than about one specific model.</p>
+
+<p><strong>Put cost per answer on the dashboard.</strong> With reasoning models, cost per token tells you little. Cost per successful answer tells you whether the change was worth it.</p>
+
+<p><strong>Clean up afterwards.</strong> Migrations leave zombie deployments behind. Retiring the old one, and telling the people who wrote documentation about it, is part of the job.</p>
+
+<h4>The bottom line</h4>
+
+<p>The 14 April 2027 retirement is not a crisis. Five months is enough time, provided you use it. The risk is not that your application goes down. The risk is that it keeps running, on a different model, with different behaviour and a different bill, and nobody notices until a customer or the finance team does.</p>
+
+<p>So check your upgrade policies this week, start capturing traffic this month, and decide on your own terms when you move. And while you are at it, build the habit rather than just finishing the task. There will be another one of these emails. There always is.</p>
+
+<p>Want a second pair of eyes on your Foundry estate before April? Get in touch and we will help you map what is running, what it costs and what it will cost next.</p>
